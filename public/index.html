@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lab 5 Login</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>Авторизация</h1>
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:420px">
+      <label>Имя пользователя
+        <input id="user" placeholder="имя" maxlength="32" />
+      </label>
+      <label>Пароль
+        <input id="pass" type="password" placeholder="пароль" maxlength="128" />
+      </label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button id="btnRegister" type="button">Регистрация</button>
+        <button id="btnLogin" type="button">Логин</button>
+        <button id="goChat" type="button" disabled>Перейти в чат</button>
+      </div>
+      <span id="status" class="meta">Введите учётные данные</span>
+    </div>
+  </div>
+
+  <script>
+    const user = document.getElementById('user');
+    const pass = document.getElementById('pass');
+    const status = document.getElementById('status');
+    const btnRegister = document.getElementById('btnRegister');
+    const btnLogin = document.getElementById('btnLogin');
+    const goChat = document.getElementById('goChat');
+    let token = localStorage.getItem('token') || '';
+
+    async function api(path, body) {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      return res.json();
+    }
+
+    btnRegister.addEventListener('click', async () => {
+      const usernameVal = (user.value || '').trim();
+      const passwordVal = pass.value || '';
+      if (!usernameVal || !passwordVal) { alert('Введите имя и пароль'); return; }
+      const data = await api('/auth/register', { username: usernameVal, password: passwordVal });
+      if (data.error) { alert(data.error); return; }
+      token = data.token;
+      localStorage.setItem('token', token);
+      status.textContent = 'Зарегистрирован. Можно перейти в чат.';
+      goChat.disabled = false;
+      localStorage.setItem('username', usernameVal);
+    });
+
+    btnLogin.addEventListener('click', async () => {
+      const usernameVal = (user.value || '').trim();
+      const passwordVal = pass.value || '';
+      if (!usernameVal || !passwordVal) { alert('Введите имя и пароль'); return; }
+      const data = await api('/auth/login', { username: usernameVal, password: passwordVal });
+      if (data.error) { alert(data.error); return; }
+      token = data.token;
+      localStorage.setItem('token', token);
+      status.textContent = 'Авторизован. Можно перейти в чат.';
+      goChat.disabled = false;
+      localStorage.setItem('username', usernameVal);
+    });
+
+    if (token) {
+      status.textContent = 'Токен найден. Можно перейти в чат.';
+      goChat.disabled = false;
+      if (!localStorage.getItem('username')) status.textContent += ' (введите имя и заново залогиньтесь для сохранения)';
+    }
+
+    goChat.addEventListener('click', () => {
+      if (!token) { alert('Нет токена'); return; }
+      if (!localStorage.getItem('username')) { alert('Нет имени'); return; }
+      window.location.href = '/chat.html';
+    });
+  </script>
+</body>
+</html>

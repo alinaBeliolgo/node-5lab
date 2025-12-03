@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lab 5 — Чат</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>Чат</h1>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px">
+      <span class="welcome" id="welcome">...</span>
+      <label>Комната: <input id="room" placeholder="sport" maxlength="32" /></label>
+      <button id="connect">Подключиться</button>
+      <button id="leave" type="button" disabled>Выйти из комнаты</button>
+      <button id="logout" type="button">Выход</button>
+      <span id="status" class="meta status-bad">Не подключен к чату</span>
+    </div>
+    <div id="log"></div>
+    <div id="typing" class="typing"></div>
+    <form id="form" action="#">
+      <textarea id="text" placeholder="Введите сообщение" maxlength="500" disabled></textarea>
+      <button type="submit" disabled>Отправить</button>
+    </form>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const username = localStorage.getItem('username');
+    if(!token || !username){
+      window.location.href = '/';
+    }
+    const welcome = document.getElementById('welcome');
+    welcome.innerHTML = 'Пользователь: <span class="welcome-name">' + escapeHtml(username) + '</span>';
+
+    const roomInput = document.getElementById('room');
+    const connectBtn = document.getElementById('connect');
+    const logoutBtn = document.getElementById('logout');
+    const leaveBtn = document.getElementById('leave');
+    const status = document.getElementById('status');
+    const log = document.getElementById('log');
+    const typingEl = document.getElementById('typing');
+    const form = document.getElementById('form');
+    const text = document.getElementById('text');
+
+    let socket = null;
+    let currentRoom = '';
+    let typingTimer = null;
+
+    function addLine(html){
+      const div = document.createElement('div');
+      div.className = 'msg';
+      div.innerHTML = html;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+    function fmt(ts){ try { return new Date(ts).toLocaleTimeString(); } catch { return ts; } }
+
+    function connect(){
+      if(socket && socket.connected) return;
+      const params = new URLSearchParams();
+      const room = (roomInput.value||'').trim();
+      if(room) params.set('room', room);
+      socket = io('/chat', { query: params.toString(), auth: { token } });
+      status.textContent = 'Подключение...';
+
+      socket.on('connect', () => {
+        status.textContent = 'Подключен к чату';
+        status.classList.remove('status-bad');
+        status.classList.add('status-ok');
+        text.disabled = false; form.querySelector('button[type="submit"]').disabled = false;
+        currentRoom = (roomInput.value||'').trim();
+        connectBtn.disabled = true;
+        roomInput.disabled = true;
+        leaveBtn.disabled = !currentRoom;
+      });
+      socket.on('disconnect', () => {
+        status.textContent = 'Не подключен к чату';
+        status.classList.remove('status-ok');
+        status.classList.add('status-bad');
+        text.disabled = true; form.querySelector('button[type="submit"]').disabled = true;
+        connectBtn.disabled = false;
+        roomInput.disabled = false;
+        leaveBtn.disabled = true;
+        currentRoom = '';
+      });
+
+      socket.on('history', items => {
+        items.forEach(m => addLine(`<span class='meta'>[${fmt(m.ts)}]</span> <b class='${m.user===username?'me':''}'>${m.user}</b>: ${escapeHtml(m.text)}`));
+      });
+      socket.on('message', m => {
+        addLine(`<span class='meta'>[${fmt(m.ts)}]</span> <b class='${m.user===username?'me':''}'>${m.user}</b>: ${escapeHtml(m.text)}`);
+      });
+      socket.on('typing', u => {
+        typingEl.textContent = `${u} печатает...`;
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(()=> typingEl.textContent='', 1000);
+      });
+      socket.on('error_message', e => {
+        addLine(`<span class='meta'>[ошибка]</span> ${escapeHtml(e.error||'Ошибка')}`);
+      });
+      socket.on('info', e => {
+        addLine(`<span class='meta'>[инфо]</span> ${escapeHtml(e.message||'')}`);
+      });
+    }
+
+    connectBtn.addEventListener('click', connect);
+
+    // Вход в комнату при активном соединении, соблюдая правило «сначала выйти»
+    roomInput.addEventListener('change', () => {
+      const desired = (roomInput.value||'').trim();
+      if(!socket || !socket.connected) return;
+      if(!desired) return;
+      if(currentRoom) {
+        // Нельзя менять комнату, пока не вышли
+        addLine(`<span class='meta'>[ошибка]</span> Сначала выйдите из текущей комнаты`);
+        roomInput.value = currentRoom;
+        return;
+      }
+      socket.emit('joinRoom', desired);
+      currentRoom = desired;
+      leaveBtn.disabled = false;
+    });
+
+    // Кнопка «Выйти из комнаты»
+    leaveBtn.addEventListener('click', () => {
+      if(!socket || !socket.connected) return;
+      if(!currentRoom) return;
+      socket.emit('leaveRoom');
+      currentRoom = '';
+      leaveBtn.disabled = true;
+      roomInput.disabled = false;
+    });
+
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      if(!socket || !socket.connected) return;
+      const t = (text.value||'').trim();
+      if(!t) return;
+      socket.emit('message', { user: username, text: t });
+      text.value='';
+    });
+
+    text.addEventListener('input', () => {
+      if(socket && socket.connected) socket.emit('typing', username);
+    });
+
+    logoutBtn.addEventListener('click', () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+      window.location.href = '/';
+    });
+
+    function escapeHtml(s){
+      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+    }
+  </script>
+</body>
+</html>
