@@ -2,6 +2,36 @@
 
 Коротко о проекте: это учебный backend на Node.js + Express, дополняющий существующий REST‑API реалтайм‑слоем на WebSockets (Socket.IO). Приложение демонстрирует базовые REST‑эндпоинты (сообщения, аутентификация на JWT) и взаимодействие по сокетам через пространства имён и комнаты (чат и уведомления). Цель — показать, как сочетать классический запрос‑ответ и событийную модель для мгновенной доставки данных в браузер.
 
+
+## Структура проекта
+```
+app.js
+config.js
+db.js
+package.json
+README.md
+images-for-docs/
+public/
+  chat.html
+  index.html
+  styles.css
+src/
+  app.js              # инициализация Express + Socket.IO
+  server.js           # запуск HTTP/WS сервера
+  middleware/
+    authRequired.js   # проверка JWT для защищённых маршрутов
+  routes/
+    authRoutes.js     # регистрация/логин
+    messageRoutes.js  # REST маршруты для сообщений
+  services/
+    auth.js           # логика JWT и пользователи
+  sockets/
+    chatNamespace.js          # логика сокетов для чата (history/message/typing)
+    notificationsNamespace.js # сокеты для уведомлений
+  store/
+    messagesStore.js  # хранилище сообщений (in-memory/БД)
+```
+
 ## Цель работы
     - Освоить один из альтернативных архитектурных стилей Web-API, отличных от REST (GraphQL, WebSockets, WebHooks, SOAP и др.).
     - Научиться выбирать архитектурный стиль под конкретную задачу и аргументировать свой выбор.
